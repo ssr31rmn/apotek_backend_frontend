@@ -1,0 +1,247 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Obat;
+use App\Models\Kategori;
+use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class ObatTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->seed(RolePermissionSeeder::class);
+    }
+
+    public function test_admin_dapat_menjalankan_crud_obat(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+        $kategori = Kategori::create(['nama_kategori' => 'Vitamin']);
+        $data = [
+            'kode_obat' => 'OBT999',
+            'nama_obat' => 'Obat Test',
+            'kategori_id' => $kategori->id_kategori,
+            'satuan' => 'Botol',
+            'harga_beli' => 10000,
+            'harga_jual' => 15000,
+            'stok' => 20,
+            'stok_minimum' => 5,
+            'tanggal_kadaluarsa' => '2028-12-31',
+            'keterangan' => 'Data untuk pengujian',
+        ];
+
+        $this->actingAs($admin)->get(route('obat.create'))->assertOk();
+        $this->actingAs($admin)->post(route('obat.store'), $data)->assertRedirect(route('obat.index'));
+
+        $obat = Obat::where('kode_obat', 'OBT999')->firstOrFail();
+        $this->assertDatabaseHas('obat', ['kode_obat' => 'OBT999', 'nama_obat' => 'Obat Test', 'apotek' => 'Apotek A']);
+        $this->actingAs($admin)->get(route('obat.show', $obat))->assertOk()->assertSee('Obat Test');
+
+        $this->actingAs($admin)->put(route('obat.update', $obat), ['nama_obat' => 'Obat Diperbarui'] + $data)
+            ->assertRedirect(route('obat.index'));
+        $this->assertDatabaseHas('obat', ['id' => $obat->id, 'nama_obat' => 'Obat Diperbarui']);
+
+        $this->actingAs($admin)->delete(route('obat.destroy', $obat))->assertRedirect(route('obat.index'));
+        $this->assertSoftDeleted('obat', ['id' => $obat->id]);
+    }
+
+    public function test_data_obat_lama_tanpa_apotek_dapat_dilengkapi_saat_edit(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_b');
+        $admin->update(['apotek' => 'Apotek B']);
+        $obat = Obat::create(['kode_obat' => 'OBT002', 'nama_obat' => 'Obat Lama', 'satuan' => 'Strip']);
+
+        $this->actingAs($admin)->put(route('obat.update', $obat), [
+            'kode_obat' => $obat->kode_obat,
+            'nama_obat' => $obat->nama_obat,
+            'satuan' => $obat->satuan,
+            'harga_beli' => 1000,
+            'harga_jual' => 1500,
+            'stok' => 1,
+            'stok_minimum' => 1,
+        ])->assertRedirect(route('obat.index'));
+
+        $this->assertDatabaseHas('obat', ['id' => $obat->id, 'apotek' => 'Apotek B']);
+    }
+
+    public function test_kasir_dapat_melihat_tetapi_tidak_dapat_mengelola_obat(): void
+    {
+        $kasir = User::factory()->create()->assignRole('kasir_apotek_a');
+        $obat = Obat::create([
+            'kode_obat' => 'OBT001',
+            'nama_obat' => 'Paracetamol',
+            'apotek' => 'Apotek A',
+            'satuan' => 'Strip',
+        ]);
+
+        $this->actingAs($kasir)->get(route('obat.index'))->assertOk();
+        $this->actingAs($kasir)->get(route('obat.show', $obat))->assertOk();
+        $this->actingAs($kasir)->get(route('obat.create'))->assertForbidden();
+        $this->actingAs($kasir)->delete(route('obat.destroy', $obat))->assertForbidden();
+    }
+
+    public function test_kode_obat_tidak_boleh_duplikat(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+        Obat::create(['kode_obat' => 'OBT001', 'nama_obat' => 'Obat Lama', 'satuan' => 'Strip']);
+
+        $this->actingAs($admin)->from(route('obat.create'))->post(route('obat.store'), [
+            'kode_obat' => 'OBT001',
+            'nama_obat' => 'Obat Baru',
+            'satuan' => 'Strip',
+            'harga_beli' => 1000,
+            'harga_jual' => 1500,
+            'stok' => 1,
+            'stok_minimum' => 1,
+        ])->assertRedirect(route('obat.create'))->assertSessionHasErrors('kode_obat');
+    }
+
+    public function test_data_obat_dapat_diurutkan_naik_dan_turun_berdasarkan_semua_kolom(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+        $bebas = Kategori::create(['nama_kategori' => 'Obat Bebas']);
+        $vitamin = Kategori::create(['nama_kategori' => 'Vitamin']);
+        $keras = Kategori::create(['nama_kategori' => 'Obat Keras']);
+        Obat::create(['kode_obat' => 'C03', 'nama_obat' => 'Zinc', 'apotek' => 'Apotek A', 'kategori_id' => $vitamin->id_kategori, 'satuan' => 'Box', 'harga_jual' => 30000, 'stok' => 5]);
+        Obat::create(['kode_obat' => 'A01', 'nama_obat' => 'Alpha', 'apotek' => 'Apotek A', 'kategori_id' => $bebas->id_kategori, 'satuan' => 'Botol', 'harga_jual' => 5000, 'stok' => 20]);
+        Obat::create(['kode_obat' => 'B02', 'nama_obat' => 'Beta', 'apotek' => 'Apotek A', 'kategori_id' => $keras->id_kategori, 'satuan' => 'Strip', 'harga_jual' => 15000, 'stok' => 10]);
+
+        $sortCases = [
+            'kode' => ['A01', 'B02', 'C03'],
+            'nama' => ['Alpha', 'Beta', 'Zinc'],
+            'stok' => ['Zinc', 'Beta', 'Alpha'],
+            'kategori' => ['Alpha', 'Beta', 'Zinc'],
+            'satuan' => ['Alpha', 'Zinc', 'Beta'],
+            'harga_jual' => ['Alpha', 'Beta', 'Zinc'],
+        ];
+
+        foreach ($sortCases as $column => $ascendingOrder) {
+            $this->actingAs($admin)
+                ->get(route('obat.index', ['sort' => $column, 'direction' => 'asc']))
+                ->assertOk()
+                ->assertSeeInOrder($ascendingOrder);
+
+            $this->actingAs($admin)
+                ->get(route('obat.index', ['sort' => $column, 'direction' => 'desc']))
+                ->assertOk()
+                ->assertSeeInOrder(array_reverse($ascendingOrder));
+        }
+    }
+
+    public function test_dropdown_sort_mendukung_kode_nama_harga_dan_stok_dengan_dua_arah(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+        Obat::create(['kode_obat' => 'B01', 'nama_obat' => 'Beta', 'apotek' => 'Apotek A', 'satuan' => 'Strip', 'harga_jual' => 2000, 'stok' => 20]);
+        Obat::create(['kode_obat' => 'A01', 'nama_obat' => 'Alpha', 'apotek' => 'Apotek A', 'satuan' => 'Strip', 'harga_jual' => 1000, 'stok' => 10]);
+
+        foreach (
+            [
+                ['sort_option' => 'kode|asc', 'order' => ['A01', 'B01']],
+                ['sort_option' => 'kode|desc', 'order' => ['B01', 'A01']],
+                ['sort_option' => 'nama|asc', 'order' => ['Alpha', 'Beta']],
+                ['sort_option' => 'nama|desc', 'order' => ['Beta', 'Alpha']],
+                ['sort_option' => 'harga_jual|asc', 'order' => ['Alpha', 'Beta']],
+                ['sort_option' => 'harga_jual|desc', 'order' => ['Beta', 'Alpha']],
+                ['sort_option' => 'stok|asc', 'order' => ['Alpha', 'Beta']],
+                ['sort_option' => 'stok|desc', 'order' => ['Beta', 'Alpha']],
+            ] as $case
+        ) {
+            $this->actingAs($admin)
+                ->get(route('obat.index', ['sort_option' => $case['sort_option']]))
+                ->assertOk()
+                ->assertSeeInOrder($case['order']);
+        }
+    }
+
+    public function test_data_obat_dapat_disaring_berdasarkan_kategori_dan_satuan(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+        $kategori = Kategori::create(['nama_kategori' => 'Vitamin']);
+        Obat::create(['kode_obat' => 'A01', 'nama_obat' => 'Obat A', 'apotek' => 'Apotek A', 'kategori_id' => $kategori->id_kategori, 'satuan' => 'Botol']);
+        Obat::create(['kode_obat' => 'B01', 'nama_obat' => 'Obat B', 'apotek' => 'Apotek B', 'satuan' => 'Strip']);
+
+        $this->actingAs($admin)
+            ->get(route('obat.index', ['kategori_id' => $kategori->id_kategori, 'satuan' => 'Botol']))
+            ->assertOk()
+            ->assertSee('Obat A')
+            ->assertDontSee('Obat B');
+    }
+
+    public function test_user_hanya_dapat_melihat_obat_dari_apoteknya(): void
+    {
+        $adminA = User::factory()->create()->assignRole('admin_apotek_a');
+        $adminB = User::factory()->create()->assignRole('admin_apotek_b');
+        $adminB->update(['apotek' => 'Apotek B']);
+        $obatA = Obat::create(['kode_obat' => 'A01', 'nama_obat' => 'Obat Apotek A', 'apotek' => 'Apotek A', 'satuan' => 'Strip']);
+        $obatB = Obat::create(['kode_obat' => 'B01', 'nama_obat' => 'Obat Apotek B', 'apotek' => 'Apotek B', 'satuan' => 'Strip']);
+
+        $this->actingAs($adminA)
+            ->get(route('obat.index'))
+            ->assertOk()
+            ->assertSee('Obat Apotek A')
+            ->assertDontSee('Obat Apotek B');
+
+        $this->actingAs($adminB)
+            ->get(route('obat.index'))
+            ->assertOk()
+            ->assertSee('Obat Apotek B')
+            ->assertDontSee('Obat Apotek A');
+
+        $this->actingAs($adminA)->get(route('obat.show', $obatB))->assertNotFound();
+        $this->actingAs($adminB)->get(route('obat.show', $obatA))->assertNotFound();
+    }
+
+    public function test_data_obat_ditampilkan_sepuluh_data_per_halaman(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+
+        foreach (range(1, 11) as $number) {
+            Obat::create([
+                'kode_obat' => sprintf('OBT%03d', $number),
+                'nama_obat' => 'Obat ' . $number,
+                'apotek' => 'Apotek A',
+                'satuan' => 'Strip',
+                'stok' => $number,
+            ]);
+        }
+
+        $pageOne = $this->actingAs($admin)
+            ->get(route('obat.index', ['sort' => 'kode', 'direction' => 'asc']))
+            ->assertOk()
+            ->assertSee('11 jenis obat')
+            ->assertSee('OBT010')
+            ->assertDontSee('OBT011');
+
+        $pageOne->assertSee('page=2');
+
+        $this->actingAs($admin)
+            ->get(route('obat.index', ['sort' => 'kode', 'direction' => 'asc', 'page' => 2]))
+            ->assertOk()
+            ->assertSee('OBT011')
+            ->assertDontSee('OBT001');
+    }
+
+    public function test_admin_dapat_mengelola_kategori_obat(): void
+    {
+        $admin = User::factory()->create()->assignRole('admin_apotek_a');
+
+        $this->actingAs($admin)->post(route('kategori.store'), ['nama_kategori' => 'Herbal'])
+            ->assertRedirect(route('kategori.index'));
+
+        $kategori = Kategori::where('nama_kategori', 'Herbal')->firstOrFail();
+        $this->actingAs($admin)->put(route('kategori.update', $kategori), ['nama_kategori' => 'Herbal Modern'])
+            ->assertRedirect(route('kategori.index'));
+        $this->assertDatabaseHas('kategori', ['id_kategori' => $kategori->id_kategori, 'nama_kategori' => 'Herbal Modern']);
+
+        $this->actingAs($admin)->delete(route('kategori.destroy', $kategori))
+            ->assertRedirect(route('kategori.index'));
+        $this->assertDatabaseMissing('kategori', ['id_kategori' => $kategori->id_kategori]);
+    }
+}
