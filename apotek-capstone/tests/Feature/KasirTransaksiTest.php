@@ -29,6 +29,7 @@ class KasirTransaksiTest extends TestCase
         return Obat::create([
             'kode_obat' => 'OBT-TEST',
             'nama_obat' => 'Obat Uji',
+            'apotek' => 'Apotek A',
             'satuan' => 'Strip',
             'harga_beli' => 4000,
             'harga_jual' => 6500,
@@ -109,5 +110,34 @@ class KasirTransaksiTest extends TestCase
             ->assertSeeText('Tersedia 3 Strip');
 
         $this->assertSame(5, $obat->fresh()->stok);
+    }
+
+    public function test_kasir_tidak_dapat_menambahkan_obat_dari_apotek_lain(): void
+    {
+        $obat = $this->obat();
+        $obat->update([
+            'kode_obat' => 'OBT-OTHER',
+            'apotek' => 'Apotek B',
+        ]);
+
+        $this->actingAs($this->kasir())
+            ->post(route('kasir.keranjang.add'), ['obat_id' => $obat->id])
+            ->assertNotFound();
+
+        $this->assertFalse(session()->has('kasir.cart'));
+        $this->assertSame(5, $obat->fresh()->stok);
+    }
+
+    public function test_obat_yang_hilang_dari_cart_dibersihkan_dan_tidak_menyebabkan_error(): void
+    {
+        $kasir = $this->kasir();
+
+        $this->actingAs($kasir)
+            ->withSession(['kasir.cart' => [999999 => 2]])
+            ->get(route('kasir.keranjang'))
+            ->assertOk()
+            ->assertSee('Keranjang masih kosong');
+
+        $this->assertSame([], session('kasir.cart'));
     }
 }
