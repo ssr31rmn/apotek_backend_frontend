@@ -46,6 +46,27 @@ Kalau langkah ini terlewat, tampilan di hosting akan memakai CSS lama dan
 sebagian halaman terlihat polos tanpa kotak, warna, atau tombol yang benar.
 npm hanya dibutuhkan di laptop, tidak pernah di server.
 
+## Cetak struk Epson TM-U220 (Windows USB)
+
+Cetak struk dijalankan oleh PHP melalui `mike42/escpos-php`, bukan oleh browser.
+Hubungkan printer USB ke komputer Windows yang menjalankan Laravel, pasang printer
+dengan driver **Generic / Text Only**, lalu aktifkan sharing pada printer dan catat
+nama share-nya. Isi `.env` pada komputer tersebut:
+
+```dotenv
+RECEIPT_PRINTER_NAME=NamaSharePrinter
+RECEIPT_PRINTER_COLUMNS=40
+```
+
+Gunakan `RECEIPT_PRINTER_COLUMNS=30` bila lebar kertas/konfigurasi printer hanya
+mendukung 30 kolom. Setelah mengubah `.env`, jalankan `php artisan config:clear`
+(atau restart proses PHP jika konfigurasi belum di-cache). Pastikan akun Windows
+yang menjalankan PHP dapat mengakses antrean printer. Kasir dapat mencetak setelah
+checkout atau mencetak ulang struk dari menu Riwayat Penjualan. Jika printer mati,
+transaksi tetap tersimpan dan struk dapat dicoba lagi dari riwayat.
+Pada halaman struk, tombol **Lihat JSON** membuka data transaksi terstruktur untuk
+memeriksa payload tanpa mengirim perintah ke printer.
+
 ## Hosting (Tanpa Terminal)
 
 1. Upload seluruh isi proyek ke hosting, termasuk `vendor` dan `public/build`.

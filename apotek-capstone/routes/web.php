@@ -50,7 +50,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('/riwayat', [PenjualanController::class, 'index'])->name('riwayat');
         Route::get('/riwayat/laporan/pdf', [PenjualanController::class, 'exportRentangPdf'])->name('riwayat.pdf-rentang');
+        Route::get('/riwayat/{penjualan}/json', [PenjualanController::class, 'receiptJson'])->name('riwayat.json');
+        Route::get('/riwayat/{penjualan}', [PenjualanController::class, 'receipt'])->name('riwayat.struk');
         Route::get('/riwayat/{penjualan}/pdf', [PenjualanController::class, 'exportPdf'])->name('riwayat.pdf');
+        Route::post('/riwayat/{penjualan}/print', [PenjualanController::class, 'printReceipt'])->name('riwayat.print');
         Route::get('/monitoring', [DashboardController::class, 'monitoring'])->name('monitoring');
     });
 });

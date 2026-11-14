@@ -43,7 +43,7 @@
                         <th scope="col" class="table-th">Kasir</th>
                         <th scope="col" class="table-th text-right">Item</th>
                         <th scope="col" class="table-th text-right">Total</th>
-                        <th scope="col" class="table-th text-right">Laporan</th>
+                        <th scope="col" class="table-th text-right">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -55,10 +55,14 @@
                             <td class="table-td text-right">{{ $item->detail->sum('jumlah') }}</td>
                             <td class="table-td text-right font-semibold text-slate-900">Rp {{ number_format($item->total, 0, ',', '.') }}</td>
                             <td class="table-td text-right">
-                                <a href="{{ route('kasir.riwayat.pdf', $item) }}" class="btn-ghost whitespace-nowrap px-3 py-1.5 text-xs">
-                                    Unduh PDF
-                                    <span class="sr-only"> transaksi {{ $item->no_faktur }}</span>
-                                </a>
+                                <div class="flex justify-end gap-2">
+                                    <a href="{{ route('kasir.riwayat.struk', $item) }}" class="btn-ghost whitespace-nowrap px-3 py-1.5 text-xs">
+                                        Struk <span class="sr-only">transaksi {{ $item->no_faktur }}</span>
+                                    </a>
+                                    <a href="{{ route('kasir.riwayat.pdf', $item) }}" class="btn-ghost whitespace-nowrap px-3 py-1.5 text-xs">
+                                        Unduh PDF <span class="sr-only">transaksi {{ $item->no_faktur }}</span>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                         <tr class="bg-slate-50">
@@ -94,9 +98,14 @@
                         </div>
                         <div class="shrink-0 text-right">
                             <p class="font-semibold text-slate-900">Rp {{ number_format($item->total, 0, ',', '.') }}</p>
-                            <a href="{{ route('kasir.riwayat.pdf', $item) }}" class="mt-2 inline-block text-xs font-semibold text-emerald-700 hover:text-emerald-800">
-                                Unduh PDF <span class="sr-only">transaksi {{ $item->no_faktur }}</span>
-                            </a>
+                            <div class="mt-2 flex flex-col items-end gap-1">
+                                <a href="{{ route('kasir.riwayat.struk', $item) }}" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                                    Struk <span class="sr-only">transaksi {{ $item->no_faktur }}</span>
+                                </a>
+                                <a href="{{ route('kasir.riwayat.pdf', $item) }}" class="text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                                    Unduh PDF <span class="sr-only">transaksi {{ $item->no_faktur }}</span>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </li>

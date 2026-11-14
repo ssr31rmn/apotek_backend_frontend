@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\DetailPenjualan;
 use App\Models\Obat;
 use App\Models\Penjualan;
 use App\Models\User;
+use App\Services\ReceiptPrinter;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -47,7 +49,8 @@ class KasirTransaksiTest extends TestCase
             ->post(route('kasir.keranjang.add'), ['obat_id' => $obat->id, 'jumlah' => 2])
             ->assertSessionHasNoErrors();
 
-        $this->post(route('kasir.checkout'))->assertRedirect(route('kasir.keranjang'));
+        $this->post(route('kasir.checkout'))
+            ->assertRedirect(route('kasir.riwayat.struk', Penjualan::first()));
 
         $this->assertSame(3, $obat->fresh()->stok);
         $this->assertDatabaseHas('penjualan', [
@@ -61,6 +64,91 @@ class KasirTransaksiTest extends TestCase
         ]);
         $this->assertSame(1, Penjualan::count());
         $this->assertFalse(session()->has('kasir.cart'));
+    }
+
+    public function test_kasir_dapat_membuka_struk_transaksi_apoteknya(): void
+    {
+        $kasir = $this->kasir();
+        $penjualan = Penjualan::create([
+            'no_faktur' => 'TRX-STRUK-TEST',
+            'user_id' => $kasir->id,
+            'tanggal_penjualan' => now(),
+            'total' => 13000,
+        ]);
+
+        $this->actingAs($kasir)
+            ->get(route('kasir.riwayat.struk', $penjualan))
+            ->assertOk()
+            ->assertSee('TRX-STRUK-TEST')
+            ->assertSee('Cetak struk');
+    }
+
+    public function test_kasir_dapat_melihat_data_struk_dalam_format_json(): void
+    {
+        $kasir = $this->kasir();
+        $obat = $this->obat();
+        $penjualan = Penjualan::create([
+            'no_faktur' => 'TRX-JSON-TEST',
+            'user_id' => $kasir->id,
+            'tanggal_penjualan' => now(),
+            'total' => 13000,
+        ]);
+        DetailPenjualan::create([
+            'penjualan_id' => $penjualan->id,
+            'obat_id' => $obat->id,
+            'jumlah' => 2,
+            'harga_jual' => 6500,
+            'subtotal' => 13000,
+        ]);
+
+        $this->actingAs($kasir)
+            ->getJson(route('kasir.riwayat.json', $penjualan))
+            ->assertOk()
+            ->assertJsonPath('no_faktur', 'TRX-JSON-TEST')
+            ->assertJsonPath('apotek', 'Apotek A')
+            ->assertJsonPath('mata_uang', 'IDR')
+            ->assertJsonPath('items.0.kode_obat', 'OBT-TEST')
+            ->assertJsonPath('items.0.nama_obat', 'Obat Uji')
+            ->assertJsonPath('items.0.jumlah', 2)
+            ->assertJsonPath('items.0.harga_satuan', '6500.00')
+            ->assertJsonPath('items.0.subtotal', '13000.00')
+            ->assertJsonPath('total', '13000.00');
+    }
+
+    public function test_kasir_dapat_mencetak_ulang_struk_transaksi_apoteknya(): void
+    {
+        $kasir = $this->kasir();
+        $penjualan = Penjualan::create([
+            'no_faktur' => 'TRX-PRINT-TEST',
+            'user_id' => $kasir->id,
+            'tanggal_penjualan' => now(),
+            'total' => 13000,
+        ]);
+
+        $this->mock(ReceiptPrinter::class)
+            ->shouldReceive('print')
+            ->once()
+            ->withArgs(fn (Penjualan $printed) => $printed->is($penjualan));
+
+        $this->actingAs($kasir)
+            ->post(route('kasir.riwayat.print', $penjualan))
+            ->assertRedirect(route('kasir.riwayat.struk', $penjualan))
+            ->assertSessionHas('success', 'Struk berhasil dikirim ke antrean printer.');
+    }
+
+    public function test_kasir_tidak_dapat_membuka_struk_transaksi_apotek_lain(): void
+    {
+        $kasirApotekB = User::factory()->create(['apotek' => 'Apotek B'])->assignRole('kasir_apotek_b');
+        $penjualan = Penjualan::create([
+            'no_faktur' => 'TRX-OTHER-STORE',
+            'user_id' => $kasirApotekB->id,
+            'tanggal_penjualan' => now(),
+            'total' => 13000,
+        ]);
+
+        $this->actingAs($this->kasir())
+            ->get(route('kasir.riwayat.struk', $penjualan))
+            ->assertNotFound();
     }
 
     public function test_checkout_ditolak_jika_stok_tidak_mencukupi_dan_tidak_mengubah_stok(): void

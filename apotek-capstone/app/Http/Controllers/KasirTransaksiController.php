@@ -155,7 +155,7 @@ class KasirTransaksiController extends Controller
 
             $request->session()->forget('kasir.cart');
 
-            return redirect()->route('kasir.keranjang')
+            return redirect()->route('kasir.riwayat.struk', $penjualan)
                 ->with('success', "Transaksi {$penjualan->no_faktur} berhasil. Total Rp ".number_format((float) $penjualan->total, 0, ',', '.'));
         } finally {
             $lock->release();
